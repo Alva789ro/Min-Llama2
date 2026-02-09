@@ -30,6 +30,10 @@ class LayerNorm(torch.nn.Module):
         self.weight = nn.Parameter(torch.ones(dim))
         self.bias = nn.Parameter(torch.zeros(dim))
 
+    #RMSNorm variant
+    # def _RMSNorm(self, x):
+    #     return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+
     def _norm(self, x):
         """
         Compute layer normalization by subtracting the mean and dividing by 
@@ -41,8 +45,11 @@ class LayerNorm(torch.nn.Module):
         Returns:
             torch.Tensor: The normalized tensor.
         """
-        # todo
-        raise NotImplementedError
+        mean = x.mean(dim=-1, keepdim=True)
+        var = x.var(dim=-1, keepdim=True, unbiased=False)
+        
+        #adding bias in forward
+        raise (x - mean) / torch.sqrt(var+self.eps) 
 
     def forward(self, x):
         """
@@ -105,8 +112,20 @@ class Attention(nn.Module):
         An optimal implementation will compute attention for all heads
         jointly using matrix/tensor operations.
         '''
-        # todo
-        raise NotImplementedError
+
+        attention_scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(self.head_dim)
+
+        # causal mask
+        if self.causal:
+            batch_size, n_heads, seqlen, _ = query.shape
+            #masking all future positions
+            mask = self.causal_mask[:seqlen, :seqlen]
+            attention_scores = attention_scores.masked_fill(mask == 0, float('-inf'))
+
+        attention_weights = F.softmax(attention_scores, dim=-1)
+        context_vector = torch.matmul(attention_weights, value)
+        
+        raise context_vector
 
 
     def forward(
@@ -204,14 +223,28 @@ class LlamaLayer(nn.Module):
         The transformer block should consist of:
         1) layer normalization of the input (via Root Mean Square layer normalization)
         2) self-attention on the layer-normalized input
-        3) a residual connection (i.e., add the input to the output of the self-attention)
+        
         3) layer normalization on the output of the self-attention
         4) a feed-forward network on the layer-normalized output of the self-attention
         5) add a residual connection from the unnormalized self-attention output to the
            output of the feed-forward network
         '''
-        # todo
-        raise NotImplementedError
+        #1) layer normalization of the input
+        norm_x = self.attention_norm(x)
+
+        #2) self-attention on the layer-normalized input
+        attn_output = self.attention(norm_x)
+
+        #3.1) Making elemnt wise addition of the residuals (embeddings for layer 1)
+        element_wise_adittion = x + attn_output
+        #3.2) layer normalization on the output of the self-attention.
+        norm_h = self.ffn_norm(element_wise_adittion)
+
+        # 4) a feed-forward network on the layer-normalized output of the self-attention
+        ffn_output = self.feed_forward(norm_h)
+
+        # 5) add a residual connection from the unnormalized self-attention output (h)
+        return ffn_output + element_wise_adittion
 
 class Llama(LlamaPreTrainedModel):
     def __init__(self, config: LlamaConfig):
@@ -272,6 +305,50 @@ class Llama(LlamaPreTrainedModel):
 
     @torch.inference_mode()
     def generate(self, idx, max_new_tokens, temperature=1.0, top_p=0.95):
+
+        def epsilon_samp(probs, logits, epsilon = 0.02):
+            "Performing Epsilon Sampling"
+            
+            #1. checking floor
+            probs[probs < epsilon] = 0.0
+
+            #2. renormalization. Falling back to most-likely token if none passed the floor 
+            if probs.sum() == 0:
+                probs[..., torch.argmax(logits, dim=-1)] = 1.0
+            else:
+                probs = probs / probs.sum(dim=-1, keepdim=True)
+
+            #3. Sample
+            idx_next = torch.multinomial(probs, num_samples=1)
+            return idx_next
+        
+        def nucleus_samp(probs, top_p):
+            "Performing nucleus (top p) sampling"
+            #1 Sort tokens by descending probability.
+            sorted_probs, sorted_indices = torch.sort(probs, descending=True)
+
+            #2 Compute the cumulative probability distribution.
+            cumulative_probs = torch.cumsum(sorted_probs, dim=-1)
+
+            #3 Select the smallest set of tokens whose cumulative probability is >= p.
+            sorted_indices_to_remove = cumulative_probs >= top_p
+            
+            #4.1 Shift the mask right to keep the first token above the threshold, ensuring we always have at least one valid token to sample
+            sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
+            sorted_indices_to_remove[..., 0] = 0
+            #4.2 Mask out all tokens outside this nucleus.
+            sorted_probs[sorted_indices_to_remove] = 0.0
+
+            #5 Renormalize the remaining probabilities so they sum to 1.
+            sorted_probs = sorted_probs / sorted_probs.sum(dim=-1, keepdim=True)
+
+            #6 Sample from the filtered probability distribution.
+            next_token_sorted_idx = torch.multinomial(sorted_probs, num_samples=1)
+
+            #7 Map back to original indices (idx_next)
+            return torch.gather(sorted_indices, -1, next_token_sorted_idx)
+
+        
         """
         Take a conditioning sequence of indices idx (LongTensor of shape (b,t)) and complete
         the sequence max_new_tokens times, feeding the predictions back into the model each time.
@@ -281,14 +358,16 @@ class Llama(LlamaPreTrainedModel):
         with no key/value cache, but you are free to add any optimizations on top of this.
         """
         for _ in range(max_new_tokens):
-            # if the sequence context is growing too long we must crop it at block_size
+            # 1. Crop Context if needed
             idx_cond = idx if idx.size(1) <= self.params.max_seq_len else idx[:, -self.params.max_seq_len:]
-            # forward the model to get the logits for the index in the sequence
+            
+            # 2. Forward Pass
             logits, _ = self(idx_cond)
             logits = logits[:, -1, :] # crop to just the final time step
             
+            # 3. Handle Sampling Logic
             if temperature == 0.0:
-                # select the single most likely index
+                # Greedy decoding
                 idx_next = torch.argmax(logits, dim=-1, keepdim=True)
             else:
                 '''
@@ -301,13 +380,18 @@ class Llama(LlamaPreTrainedModel):
                 6) Renormalize the remaining probabilities so they sum to 1.
                 7) Sample from this filtered probability distribution.
                 '''
-                # todo 
+                #1.1 Scale logits
+                logits = logits / temperature
+                #1.2 softmax norm
+                probs = F.softmax(logits, dim=-1)
+                
+                # #epsilon
+                # idx_next = epsilon_samp(probs, logits)
 
-                raise NotImplementedError
-                # map to original vocab indices
-                idx_next = None
-            
-            # append sampled index to the running sequence and continue
+                #top-p
+                idx_next = nucleus_samp(probs, top_p)
+                
+            # 4. Append to sequence
             idx = torch.cat((idx, idx_next), dim=1)
 
         return idx
