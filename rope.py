@@ -55,6 +55,14 @@ def apply_rotary_emb(
     # Please refer to Lecture 5 slides in https://cmu-l3.github.io/anlp-fall2025/static_files/anlp-f2025-05-transformers.pdf
     # and Section 3 in https://arxiv.org/abs/2104.09864.
 
+    freqs = 1.0 / (theta ** (torch.arange(0, head_dim, 2)[: (head_dim // 2)].float().to(device) / head_dim))
+    pos_idxs = torch.arange(seqlen, device=device, dtype=torch.float32)
+    
+    #angle calcualtion
+    freqs = torch.outer(pos_idxs, freqs)
+    freqs_cos = freqs.cos().view(1, seqlen, 1, -1)
+    freqs_sin = freqs.sin().view(1, seqlen, 1, -1)
+
     # reshape xq and xk to match the complex representation
     query_real, query_imag = query.float().reshape(query.shape[:-1] + (-1, 2)).unbind(-1)
     key_real, key_imag = key.float().reshape(key.shape[:-1] + (-1, 2)).unbind(-1)
@@ -63,13 +71,19 @@ def apply_rotary_emb(
 
     # First, compute the trigonometric values in the second and fourth columns in
     # slide 49 (linked above).
+    #query rotation
+    query_out_real = query_real * freqs_cos - query_imag * freqs_sin
+    query_out_imag = query_real * freqs_sin + query_imag * freqs_cos
+    #key rotation
+    key_out_real = key_real * freqs_cos - key_imag * freqs_sin
+    key_out_imag = key_real * freqs_sin + key_imag * freqs_cos
+
 
     # Then, combine these trigonometric values with the tensors query_real, query_imag,
     # key_real, and key_imag.
+    query_out = torch.stack([query_out_real, query_out_imag], dim=-1).flatten(3)
+    key_out = torch.stack([key_out_real, key_out_imag], dim=-1).flatten(3)
 
-    raise NotImplementedError
-
-    query_out = None
-    key_out = None
     # Return the rotary position embeddings for the query and key tensors
-    return query_out, key_out
+    #casting back to original type
+    return query_out.type_as(query), key_out.type_as(key)
