@@ -1,0 +1,7 @@
+%%writefile .gitignore
+__pycache__/
+*.pt
+*.pth
+data/addition_*.txt
+generated-*.txt
+*.pyc

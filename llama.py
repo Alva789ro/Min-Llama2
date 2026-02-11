@@ -49,7 +49,7 @@ class LayerNorm(torch.nn.Module):
         var = x.var(dim=-1, keepdim=True, unbiased=False)
         
         #adding bias in forward
-        raise (x - mean) / torch.sqrt(var+self.eps) 
+        return (x - mean) / torch.sqrt(var+self.eps) 
 
     def forward(self, x):
         """
@@ -125,7 +125,7 @@ class Attention(nn.Module):
         attention_weights = F.softmax(attention_scores, dim=-1)
         context_vector = torch.matmul(attention_weights, value)
         
-        raise context_vector
+        return context_vector
 
 
     def forward(
@@ -294,12 +294,12 @@ class Llama(LlamaPreTrainedModel):
             h = layer(h)
         h = self.norm(h)
 
-        if targets is not None:
+        # if targets is not None:
             # if we are given some desired targets also calculate the loss
-            logits = self.output(h)
-        else:
-            # inference-time mini-optimization: only forward the output on the very last position
-            logits = self.output(h[:, [-1], :]) # note: using list [-1] to preserve the time dim
+        logits = self.output(h)
+        # else:
+        #     # inference-time mini-optimization: only forward the output on the very last position
+        #     logits = self.output(h[:, [-1], :]) # note: using list [-1] to preserve the time dim
 
         return logits, h
 

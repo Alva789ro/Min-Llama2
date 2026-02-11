@@ -73,7 +73,7 @@ def train_one_epoch(model, loader, optimizer, device):
     n_batches = 0
     
     # We use reduction='none' so we can apply our custom mask later
-    loss_fct = torch.nn.CrossEntropyLoss(reduction='none')
+    loss_fct = torch.nn.CrossEntropyLoss(reduction='none', ignore_index=-1)
 
     for batch in tqdm(loader, desc="Training"):
         # Assuming loader returns pairs of (input, target)
@@ -144,7 +144,7 @@ def evaluate_loss(model, loader, device):
     model.eval()
     total_loss = 0
     n_batches = 0
-    loss_func = torch.nn.CrossEntropyLoss(reduction='none')
+    loss_func = torch.nn.CrossEntropyLoss(reduction='none', ignore_index=-1)
    
     for batch in tqdm(loader, desc="Evaluating"):
         x, y = batch
