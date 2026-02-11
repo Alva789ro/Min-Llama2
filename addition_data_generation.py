@@ -15,10 +15,22 @@ def generate_addition_data(n):
     5) Return the data formatted as strings of the form "a+b=c"
     """
     # todo
-    # data = []
-    # ....
-    # return data
-    raise NotImplementedError
+    data = []
+    unique_pairs = set()
+
+    while len(data) <= n:
+        a = random.randint(1000,9999)
+        b = random.randint(1000,9999)
+        key = tuple(sorted((a, b)))
+        
+        if key not in unique_pairs:
+            unique_pairs.add(key)
+            c = a + b
+            samp = f"{a}+{b}={c}"
+            data.append(samp)
+            
+    return data
+    
 
 def generate_dataset(n, filename, save_dir="data"):
     data = generate_addition_data(n)

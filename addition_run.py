@@ -68,10 +68,55 @@ def train_one_epoch(model, loader, optimizer, device):
     # total_loss = 0
     # n_batches = 0
     # for ...
+    model.train()
+    total_loss = 0
+    n_batches = 0
+    
+    # We use reduction='none' so we can apply our custom mask later
+    loss_fct = torch.nn.CrossEntropyLoss(reduction='none')
 
-    # return total_loss / n_batches
+    for batch in tqdm(loader, desc="Training"):
+        # Assuming loader returns pairs of (input, target)
+        x, y = batch
+        x, y = x.to(device), y.to(device)
+        
+        optimizer.zero_grad()
+        
+        # Forward pass
+        logits, _ = model(x)
+        
+        # Create a mask to ignore the "question" part of the sequence
+        # We only care about predicting the answer, which comes after "=" (token 12)
+        mask = torch.zeros_like(y, dtype=torch.float)
+        
+        for i in range(len(x)):
+            # Find the index of the "=" token
+            eq_indices = (x[i] == 12).nonzero(as_tuple=True)[0]
+            
+            if len(eq_indices) > 0:
+                # We want to train on the token AT '=' (which predicts the first digit)
+                # and everything after it.
+                start_idx = eq_indices[0]
+                mask[i, start_idx:] = 1.0
+        
+        # Compute loss
+        # Flatten logits to [batch * seq_len, vocab_size] and targets to [batch * seq_len]
+        loss = loss_fct(logits.view(-1, logits.size(-1)), y.view(-1))
+        
+        # Reshape loss back to [batch, seq_len] to apply mask
+        loss = loss.view(y.size())
+        
+        # Apply mask and compute mean over valid tokens only
+        # We add a small epsilon to avoid division by zero if a batch has no valid tokens
+        masked_loss = (loss * mask).sum() / (mask.sum() + 1e-6)
+        
+        masked_loss.backward()
+        optimizer.step()
+        
+        total_loss += masked_loss.item()
+        n_batches += 1
 
-    raise NotImplementedError
+    return total_loss / n_batches
 
 
 @torch.no_grad()
@@ -96,14 +141,35 @@ def evaluate_loss(model, loader, device):
         token id for "=" is 12. 
     """
     # todo
-    # model.eval()
-    # total_loss = 0
-    # n_batches = 0
-    # for ...
+    model.eval()
+    total_loss = 0
+    n_batches = 0
+    loss_func = torch.nn.CrossEntropyLoss(reduction='none')
+   
+    for batch in tqdm(loader, desc="Evaluating"):
+        x, y = batch
+        x, y = x.to(device), y.to(device)
+        
+        logits, _ = model(x)
+        
+        # Same masking logic as training
+        mask = torch.zeros_like(y, dtype=torch.float)
+        
+        for i in range(len(x)):
+            eq_indices = (x[i] == 12).nonzero(as_tuple=True)[0]
+            if len(eq_indices) > 0:
+                start_idx = eq_indices[0]
+                mask[i, start_idx:] = 1.0
+        
+        loss = loss_func(logits.view(-1, logits.size(-1)), y.view(-1))
+        loss = loss.view(y.size())
+        
+        masked_loss = (loss * mask).sum() / (mask.sum() + 1e-6)
+        
+        total_loss += masked_loss.item()
+        n_batches += 1
 
-    # return total_loss / n_batches
-
-    raise NotImplementedError
+    return total_loss / n_batches
 
 
 
