@@ -1,9 +1,9 @@
 {
     "model_config": {
         "vocab_size": 13,
-        "dim": 16,
+        "dim": 96,
         "dropout": 0.0,
-        "n_layers": 32,
+        "n_layers": 3,
         "n_heads": 4,
         "n_kv_heads": 4,
         "max_seq_len": 20,
@@ -14,13 +14,13 @@
         "use_cache": true
     },
     "train_config": {
-        "capacity": 500000000000,
+        "capacity": 5808844800000,
         "n_epochs": 10,
         "batch_size": 4096,
         "save_dir": "addition_models/ablation_2",
-        "model_parameters": 133360,
-        "train_samples": 62488
+        "model_parameters": 334368,
+        "train_samples": 289544
     },
-    "num_params": 133360,
-    "accuracy": 0.0015996800639872025
+    "num_params": 334368,
+    "accuracy": 0.997
 }

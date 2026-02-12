@@ -1,8 +1,8 @@
 {
-    "capacity": 500000000000,
+    "capacity": 5808844800000,
     "n_epochs": 10,
     "batch_size": 4096,
     "save_dir": "addition_models/ablation_5",
-    "model_parameters": 667296,
-    "train_samples": 12489
+    "model_parameters": 21384,
+    "train_samples": 4527408
 }
