@@ -5,3 +5,9 @@ __pycache__/
 data/addition_*.txt
 generated-*.txt
 *.pyc
+
+
+data/*.txt
+addition_models/**/*.pth
+addition_models/**/predictions.json
+*.log
