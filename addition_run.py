@@ -7,6 +7,7 @@ import addition_lib
 import re
 import math
 import argparse
+import csv
 
 import matplotlib.pyplot as plt
 
@@ -263,6 +264,8 @@ def model_training(args):
     generate_dataset(n_training_samples, "addition_train.txt", save_dir="data")
     generate_dataset(n_validation_samples, "addition_dev.txt", save_dir="data")
 
+    generate_dataset(5000, "addition_test.txt", save_dir="data") #fixed intentional to compare to all capacity variations.
+
     train_dataset = addition_lib.create_datasets(args.train_file)
     val_dataset = addition_lib.create_datasets(args.val_file)
 
@@ -291,6 +294,15 @@ def model_training(args):
         # Append the losses to history
         history["train_loss"].append(train_loss)
         history["val_loss"].append(val_loss)
+
+        #additional logging -> personal addition
+        log_file = os.path.join(training_config["save_dir"], "training_logs.csv")
+        file_exists = os.path.isfile(log_file)
+        with open(log_file, "a", newline='') as f:
+            writer = csv.writer(f)
+            if not file_exists:
+                writer.writerow(["epoch", "train_loss", "val_loss", "params"])
+            writer.writerow([epoch, train_loss, val_loss, total_params])
 
         # Print the loss values
         print(

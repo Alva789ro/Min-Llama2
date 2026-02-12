@@ -33,9 +33,22 @@ def generate_addition_data(n):
     
 
 def generate_dataset(n, filename, save_dir="data"):
-    data = generate_addition_data(n)
-    os.makedirs('data', exist_ok=True)
+    # data = generate_addition_data(n)
+    # os.makedirs('data', exist_ok=True)
+    # filepath = os.path.join(save_dir, filename)
+    # with open(filepath, 'w') as f:
+    #     f.write('\n'.join(data))
+    # print(f"{n} data points saved to {filepath}")
+
+    #modified implementation to not generate new data if it already exists; for variable control and efficiency
+    os.makedirs(save_dir, exist_ok=True)
     filepath = os.path.join(save_dir, filename)
+
+    if os.path.exists(filepath):
+        print(f"Dataset already exists at {filepath}. Skipping generation.")
+        return
+    
+    data = generate_addition_data(n)
     with open(filepath, 'w') as f:
         f.write('\n'.join(data))
     print(f"{n} data points saved to {filepath}")
